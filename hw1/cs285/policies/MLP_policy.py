@@ -73,6 +73,7 @@ class MLPPolicySL(BasePolicy, nn.Module, metaclass=abc.ABCMeta):
     update:
         Trains the policy with a supervised learning objective
     """
+
     def __init__(self,
                  ac_dim,
                  ob_dim,
@@ -116,7 +117,7 @@ class MLPPolicySL(BasePolicy, nn.Module, metaclass=abc.ABCMeta):
         """
         torch.save(self.state_dict(), filepath)
 
-    def forward(self, observation: torch.FloatTensor) -> Any:
+    def forward(self, observation: torch.FloatTensor) -> distributions.Distribution:
         """
         Defines the forward pass of the network
 
@@ -129,7 +130,8 @@ class MLPPolicySL(BasePolicy, nn.Module, metaclass=abc.ABCMeta):
         # through it. For example, you can return a torch.FloatTensor. You can also
         # return more flexible objects, such as a
         # `torch.distributions.Distribution` object. It's up to you!
-        raise NotImplementedError
+        observation = ptu.from_numpy(observation).float()
+        return distributions.Normal(self.mean_net(observation), torch.exp(self.logstd)[None])
 
     def update(self, observations, actions):
         """
@@ -141,7 +143,13 @@ class MLPPolicySL(BasePolicy, nn.Module, metaclass=abc.ABCMeta):
             dict: 'Training Loss': supervised learning loss
         """
         # TODO: update the policy and return the loss
-        loss = TODO
+        action_distribution = self.forward(observations)
+        self.optimizer.zero_grad()
+        actions = ptu.from_numpy(actions).float()
+
+        loss = -action_distribution.log_prob(actions).mean()
+        loss.backward()
+        self.optimizer.step()
         return {
             # You can add extra logging information here, but keep this line
             'Training Loss': ptu.to_numpy(loss),

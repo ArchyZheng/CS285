@@ -20,7 +20,6 @@ from cs285.infrastructure.replay_buffer import ReplayBuffer
 from cs285.policies.MLP_policy import MLPPolicySL
 from cs285.policies.loaded_gaussian_policy import LoadedGaussianPolicy
 
-
 # how many rollouts to save as videos to tensorboard
 MAX_NVIDEO = 2
 MAX_VIDEO_LEN = 40  # we overwrite this in the code below
@@ -76,7 +75,7 @@ def run_training_loop(params):
 
     # simulation timestep, will be used for video saving
     if 'model' in dir(env):
-        fps = 1/env.model.opt.timestep
+        fps = 1 / env.model.opt.timestep
     else:
         fps = env.env.metadata['render_fps']
 
@@ -114,7 +113,7 @@ def run_training_loop(params):
     start_time = time.time()
 
     for itr in range(params['n_iter']):
-        print("\n\n********** Iteration %i ************"%itr)
+        print("\n\n********** Iteration %i ************" % itr)
 
         # decide if videos should be rendered/logged at this iteration
         log_video = ((itr % params['video_log_freq'] == 0) and (params['video_log_freq'] != -1))
@@ -132,7 +131,8 @@ def run_training_loop(params):
             # TODO: collect `params['batch_size']` transitions
             # HINT: use utils.sample_trajectories
             # TODO: implement missing parts of utils.sample_trajectory
-            paths, envsteps_this_batch = TODO
+            paths, envsteps_this_batch = utils.sample_trajectories(env, actor, params['eval_batch_size'],
+                                                                   params['ep_len'])
 
             # relabel the collected obs with actions from a provided expert policy
             if params['do_dagger']:
@@ -141,7 +141,7 @@ def run_training_loop(params):
                 # TODO: relabel collected obsevations (from our policy) with labels from expert policy
                 # HINT: query the policy (using the get_action function) with paths[i]["observation"]
                 # and replace paths[i]["action"] with these expert labels
-                paths = TODO
+                paths[0]['action'] = expert_policy.get_action(paths[0]['observation'])
 
         total_envsteps += envsteps_this_batch
         # add collected data to replay buffer
@@ -151,20 +151,19 @@ def run_training_loop(params):
         print('\nTraining agent using sampled data from replay buffer...')
         training_logs = []
         for _ in range(params['num_agent_train_steps_per_iter']):
+            # TODO: sample some data from replay_buffer
+            # HINT1: how much data = params['train_batch_size']
+            # HINT2: use np.random.permutation to sample random indices
+            # HINT3: return corresponding data points from each array (i.e., not different indices from each array)
+            # for imitation learning, we only need observations and actions.
+            batch_size = params['batch_size']
+            random_index = np.random.permutation(len(replay_buffer.obs))
+            random_index_clipped = random_index[:batch_size]
+            ob_batch, ac_batch = replay_buffer.obs[random_index_clipped], replay_buffer.acs[random_index_clipped]
 
-          # TODO: sample some data from replay_buffer
-          # HINT1: how much data = params['train_batch_size']
-          # HINT2: use np.random.permutation to sample random indices
-          # HINT3: return corresponding data points from each array (i.e., not different indices from each array)
-          # for imitation learning, we only need observations and actions.
-          batch_size = params['batch_size']
-          random_index = np.random.permutation(len(replay_buffer.obs))
-          random_index_clipped = random_index[:batch_size]
-          ob_batch, ac_batch = replay_buffer.obs[random_index_clipped], replay_buffer.acs[random_index_clipped]
-
-          # use the sampled data to train an agent
-          train_log = actor.update(ob_batch, ac_batch)
-          training_logs.append(train_log)
+            # use the sampled data to train an agent
+            train_log = actor.update(ob_batch, ac_batch)
+            training_logs.append(train_log)
 
         # log/save
         print('\nBeginning logging procedure...')
@@ -190,7 +189,7 @@ def run_training_loop(params):
 
             logs = utils.compute_metrics(paths, eval_paths)
             # compute additional metrics
-            logs.update(training_logs[-1]) # Only use the last log for now
+            logs.update(training_logs[-1])  # Only use the last log for now
             logs["Train_EnvstepsSoFar"] = total_envsteps
             logs["TimeSinceStart"] = time.time() - start_time
             if itr == 0:
@@ -212,17 +211,21 @@ def run_training_loop(params):
 def main():
     import argparse
     parser = argparse.ArgumentParser()
-    parser.add_argument('--expert_policy_file', '-epf', type=str, required=True)  # relative to where you're running this script from
-    parser.add_argument('--expert_data', '-ed', type=str, required=True) #relative to where you're running this script from
+    parser.add_argument('--expert_policy_file', '-epf', type=str,
+                        required=True)  # relative to where you're running this script from
+    parser.add_argument('--expert_data', '-ed', type=str,
+                        required=True)  # relative to where you're running this script from
     parser.add_argument('--env_name', '-env', type=str, help=f'choices: {", ".join(MJ_ENV_NAMES)}', required=True)
     parser.add_argument('--exp_name', '-exp', type=str, default='pick an experiment name', required=True)
     parser.add_argument('--do_dagger', action='store_true')
     parser.add_argument('--ep_len', type=int)
 
-    parser.add_argument('--num_agent_train_steps_per_iter', type=int, default=1000)  # number of gradient steps for training policy (per iter in n_iter)
+    parser.add_argument('--num_agent_train_steps_per_iter', type=int,
+                        default=1000)  # number of gradient steps for training policy (per iter in n_iter)
     parser.add_argument('--n_iter', '-n', type=int, default=1)
 
-    parser.add_argument('--batch_size', type=int, default=1000)  # training data collected (in the env) during each iteration
+    parser.add_argument('--batch_size', type=int,
+                        default=1000)  # training data collected (in the env) during each iteration
     parser.add_argument('--eval_batch_size', type=int,
                         default=1000)  # eval data collected (in the env) for logging metrics
     parser.add_argument('--train_batch_size', type=int,
@@ -251,11 +254,12 @@ def main():
     if args.do_dagger:
         # Use this prefix when submitting. The auto-grader uses this prefix.
         logdir_prefix = 'q2_'
-        assert args.n_iter>1, ('DAGGER needs more than 1 iteration (n_iter>1) of training, to iteratively query the expert and train (after 1st warmstarting from behavior cloning).')
+        assert args.n_iter > 1, (
+            'DAGGER needs more than 1 iteration (n_iter>1) of training, to iteratively query the expert and train (after 1st warmstarting from behavior cloning).')
     else:
         # Use this prefix when submitting. The auto-grader uses this prefix.
         logdir_prefix = 'q1_'
-        assert args.n_iter==1, ('Vanilla behavior cloning collects expert data just once (n_iter=1)')
+        assert args.n_iter == 1, ('Vanilla behavior cloning collects expert data just once (n_iter=1)')
 
     # directory for logging
     data_path = os.path.join(os.path.dirname(os.path.realpath(__file__)), '../../data')
@@ -264,7 +268,7 @@ def main():
     logdir = logdir_prefix + args.exp_name + '_' + args.env_name + '_' + time.strftime("%d-%m-%Y_%H-%M-%S")
     logdir = os.path.join(data_path, logdir)
     params['logdir'] = logdir
-    if not(os.path.exists(logdir)):
+    if not (os.path.exists(logdir)):
         os.makedirs(logdir)
 
     ###################

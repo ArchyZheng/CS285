@@ -1,0 +1,44 @@
+{
+    // Use IntelliSense to learn about possible attributes.
+    // Hover to view descriptions of existing attributes.
+    // For more information, visit: https://go.microsoft.com/fwlink/?linkid=830387
+    "version": "0.2.0",
+    "configurations": [
+        {
+            "name": "Test DQN With Cartpole",
+            "type": "python",
+            "request": "launch",
+            "program": "cs285/scripts/run_hw3_dqn.py",
+            "args": ["-cfg=experiments/dqn/cartpole.yaml"],
+            "console": "integratedTerminal",
+            "justMyCode": true
+        },
+        {
+            "name": "lunarLander_seed_1",
+            "type": "python",
+            "request": "launch",
+            "program": "cs285/scripts/run_hw3_dqn.py",
+            "args": ["-cfg=experiments/dqn/lunarlander.yaml", "--seed=1"],
+            "console": "integratedTerminal",
+            "justMyCode": true
+        },
+        {
+            "name": "lunarLander_seed_2",
+            "type": "python",
+            "request": "launch",
+            "program": "cs285/scripts/run_hw3_dqn.py",
+            "args": ["-cfg=experiments/dqn/lunarlander.yaml", "--seed=2"],
+            "console": "integratedTerminal",
+            "justMyCode": true
+        },
+        {
+            "name": "lunarLander_seed_3",
+            "type": "python",
+            "request": "launch",
+            "program": "cs285/scripts/run_hw3_dqn.py",
+            "args": ["-cfg=experiments/dqn/lunarlander.yaml", "--seed=3"],
+            "console": "integratedTerminal",
+            "justMyCode": true
+        }
+    ]
+}

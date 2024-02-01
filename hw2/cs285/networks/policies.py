@@ -58,9 +58,10 @@ class MLPPolicy(nn.Module):
     @torch.no_grad()
     def get_action(self, obs: np.ndarray) -> np.ndarray:
         """Takes a single observation (as a numpy array) and returns a single action (as a numpy array)."""
-        # TODO: implement get_action
-        action = None
-
+        obs = torch.from_numpy(obs).float().to(ptu.device)
+        distribution = self.forward(obs)
+        action = distribution.sample()
+        action = action.detach().cpu().numpy()
         return action
 
     def forward(self, obs: torch.FloatTensor):
@@ -69,13 +70,15 @@ class MLPPolicy(nn.Module):
         able to differentiate through it. For example, you can return a torch.FloatTensor. You can also return more
         flexible objects, such as a `torch.distributions.Distribution` object. It's up to you!
         """
+        distribution = None
         if self.discrete:
-            # TODO: define the forward pass for a policy with a discrete action space.
-            pass
+            logits_output = self.logits_net(obs)
+            distribution = distributions.Categorical(logits=logits_output)
+
         else:
-            # TODO: define the forward pass for a policy with a continuous action space.
-            pass
-        return None
+            mean_values = self.mean_net(obs)
+            distribution = distributions.MultivariateNormal(mean_values, torch.diag(self.logstd.exp()))
+        return distribution
 
     def update(self, obs: np.ndarray, actions: np.ndarray, *args, **kwargs) -> dict:
         """Performs one iteration of gradient descent on the provided batch of data."""
@@ -97,7 +100,11 @@ class MLPPolicyPG(MLPPolicy):
         advantages = ptu.from_numpy(advantages)
 
         # TODO: implement the policy gradient actor update.
-        loss = None
+        predictitions = self.forward_net(obs)
+        critic = torch.nn.MSELoss()
+        targets = torch.randn_like(predictitions, dtype=torch.float32, device=self.device)
+
+        loss = critic(predictitions, targets)
 
         return {
             "Actor Loss": ptu.to_numpy(loss),

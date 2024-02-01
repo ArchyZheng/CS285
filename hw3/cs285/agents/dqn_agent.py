@@ -6,22 +6,23 @@ from torch import nn
 import numpy as np
 
 import cs285.infrastructure.pytorch_util as ptu
+import random
 
 
 class DQNAgent(nn.Module):
     def __init__(
-        self,
-        observation_shape: Sequence[int],
-        num_actions: int,
-        make_critic: Callable[[Tuple[int, ...], int], nn.Module],
-        make_optimizer: Callable[[torch.nn.ParameterList], torch.optim.Optimizer],
-        make_lr_schedule: Callable[
-            [torch.optim.Optimizer], torch.optim.lr_scheduler._LRScheduler
-        ],
-        discount: float,
-        target_update_period: int,
-        use_double_q: bool = False,
-        clip_grad_norm: Optional[float] = None,
+            self,
+            observation_shape: Sequence[int],
+            num_actions: int,
+            make_critic: Callable[[Tuple[int, ...], int], nn.Module],
+            make_optimizer: Callable[[torch.nn.ParameterList], torch.optim.Optimizer],
+            make_lr_schedule: Callable[
+                [torch.optim.Optimizer], torch.optim.lr_scheduler._LRScheduler
+            ],
+            discount: float,
+            target_update_period: int,
+            use_double_q: bool = False,
+            clip_grad_norm: Optional[float] = None,
     ):
         super().__init__()
 
@@ -48,17 +49,17 @@ class DQNAgent(nn.Module):
         observation = ptu.from_numpy(np.asarray(observation))[None]
 
         # TODO(student): get the action from the critic using an epsilon-greedy strategy
-        action = ...
+        action = self.critic(observation).max(dim=1)[1] if torch.rand(1) > epsilon else torch.randint(0, self.num_actions, (1, ))
 
         return ptu.to_numpy(action).squeeze(0).item()
 
     def update_critic(
-        self,
-        obs: torch.Tensor,
-        action: torch.Tensor,
-        reward: torch.Tensor,
-        next_obs: torch.Tensor,
-        done: torch.Tensor,
+            self,
+            obs: torch.Tensor,
+            action: torch.Tensor,
+            reward: torch.Tensor,
+            next_obs: torch.Tensor,
+            done: torch.Tensor,
     ) -> dict:
         """Update the DQN critic, and return stats for logging."""
         (batch_size,) = reward.shape
@@ -66,21 +67,24 @@ class DQNAgent(nn.Module):
         # Compute target values
         with torch.no_grad():
             # TODO(student): compute target values
-            next_qa_values = ...
+            next_qa_values = self.target_critic(next_obs)
+
+            max_values_and_index = next_qa_values.max(dim=1)
 
             if self.use_double_q:
                 raise NotImplementedError
             else:
-                next_action = ...
-            
-            next_q_values = ...
-            target_values = ...
+                next_action = max_values_and_index[1]
+
+            next_q_values = torch.gather(next_qa_values, 1, torch.unsqueeze(next_action, 1))
+            next_q_values = torch.where(done.unsqueeze(dim=1) == 1, 0, next_q_values)
+            target_values = torch.unsqueeze(reward, 1) + self.discount * next_q_values
 
         # TODO(student): train the critic with the target values
-        qa_values = ...
-        q_values = ... # Compute from the data actions; see torch.gather
-        loss = ...
-
+        qa_values = self.critic(obs)
+        action = torch.unsqueeze(action, dim=1)
+        q_values = torch.gather(qa_values, dim=1, index=action)  # Compute from the data actions; see torch.gather
+        loss = self.critic_loss(q_values, target_values)
 
         self.critic_optimizer.zero_grad()
         loss.backward()
@@ -102,17 +106,20 @@ class DQNAgent(nn.Module):
         self.target_critic.load_state_dict(self.critic.state_dict())
 
     def update(
-        self,
-        obs: torch.Tensor,
-        action: torch.Tensor,
-        reward: torch.Tensor,
-        next_obs: torch.Tensor,
-        done: torch.Tensor,
-        step: int,
+            self,
+            obs: torch.Tensor,
+            action: torch.Tensor,
+            reward: torch.Tensor,
+            next_obs: torch.Tensor,
+            done: torch.Tensor,
+            step: int,
     ) -> dict:
         """
         Update the DQN agent, including both the critic and target.
         """
         # TODO(student): update the critic, and the target if needed
+        critic_stats = self.update_critic(obs, action, reward, next_obs, done)
+        if step % self.target_update_period == 0:
+            self.update_target_critic()
 
         return critic_stats
